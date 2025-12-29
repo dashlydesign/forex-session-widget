@@ -1,7 +1,6 @@
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-
 <style>
 body{
   margin:0;
@@ -18,12 +17,12 @@ body{
   display:flex;
   flex-direction:column;
   align-items:center;
-  gap:32px;
+  gap:36px;
 }
 
 .clocks{
   display:flex;
-  gap:120px;
+  gap:140px;
 }
 
 canvas{display:block}
@@ -41,13 +40,17 @@ canvas{display:block}
   padding:14px 0;
   text-align:center;
   font-size:14px;
+  opacity:.55;
+}
+
+.session.active{
+  opacity:1;
 }
 
 .countdowns{
   display:flex;
-  gap:56px;
+  gap:64px;
   font-size:14px;
-  opacity:.9;
 }
 </style>
 </head>
@@ -61,12 +64,7 @@ canvas{display:block}
     <canvas id="ist" width="160" height="160"></canvas>
   </div>
 
-  <div class="sessions">
-    <div class="session">Sydney 00–09</div>
-    <div class="session">Tokyo 02–11</div>
-    <div class="session">London 09–18</div>
-    <div class="session">New York 14–23</div>
-  </div>
+  <div class="sessions" id="sessions"></div>
 
   <div class="countdowns">
     <div id="end"></div>
@@ -76,9 +74,8 @@ canvas{display:block}
 </div>
 
 <script>
-// ---- SAFE TIME BASE ----
+// -------- TIME BASE --------
 let utcOffsetMs = 0;
-
 fetch("https://worldtimeapi.org/api/timezone/Etc/UTC")
   .then(r=>r.json())
   .then(d=>{
@@ -86,7 +83,7 @@ fetch("https://worldtimeapi.org/api/timezone/Etc/UTC")
   })
   .catch(()=>{});
 
-// ---- SESSIONS (MT5 UTC+2) ----
+// -------- SESSIONS (MT5 UTC+2) --------
 const sessions = [
   {name:"Sydney", start:0, end:9},
   {name:"Tokyo", start:2, end:11},
@@ -94,7 +91,16 @@ const sessions = [
   {name:"New York", start:14, end:23}
 ];
 
-// ---- CLOCK ----
+// render session boxes
+const sessionsEl = document.getElementById("sessions");
+sessions.forEach(s=>{
+  const d=document.createElement("div");
+  d.className="session";
+  d.textContent=`${s.name} ${String(s.start).padStart(2,"0")}–${String(s.end).padStart(2,"0")}`;
+  sessionsEl.appendChild(d);
+});
+
+// -------- CLOCK DRAW --------
 function drawClock(canvas, date){
   const ctx = canvas.getContext("2d");
   const r = canvas.width/2;
@@ -103,9 +109,20 @@ function drawClock(canvas, date){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.translate(r,r);
 
-  const sec = date.getSeconds()+date.getMilliseconds()/1000;
-  const min = date.getMinutes()+sec/60;
-  const hr  = date.getHours()%12+min/60;
+  // ticks
+  ctx.strokeStyle="rgba(255,255,255,.25)";
+  ctx.lineWidth=1;
+  for(let i=0;i<12;i++){
+    ctx.beginPath();
+    const a=i*Math.PI/6;
+    ctx.moveTo(Math.cos(a)*r*0.82,Math.sin(a)*r*0.82);
+    ctx.lineTo(Math.cos(a)*r*0.88,Math.sin(a)*r*0.88);
+    ctx.stroke();
+  }
+
+  const sec=date.getSeconds()+date.getMilliseconds()/1000;
+  const min=date.getMinutes()+sec/60;
+  const hr=date.getHours()%12+min/60;
 
   function hand(a,l,w){
     ctx.beginPath();
@@ -125,61 +142,52 @@ function drawClock(canvas, date){
   hand(sec*Math.PI/30, r*0.83, 1.6);
 }
 
-// ---- BOTH COUNTDOWNS WITH SECONDS ----
-function updateCountdowns(mt5){
+// -------- COUNTDOWNS --------
+function updateSessionsAndCountdown(mt5){
   const t = mt5.getHours()*3600 + mt5.getMinutes()*60 + mt5.getSeconds();
 
   let current, next;
-
   for(let i=0;i<sessions.length;i++){
-    const s = sessions[i];
-    if(t >= s.start*3600 && t < s.end*3600){
-      current = s;
-      next = sessions[i+1] || sessions[0];
+    if(t>=sessions[i].start*3600 && t<sessions[i].end*3600){
+      current=sessions[i];
+      next=sessions[i+1]||sessions[0];
       break;
     }
   }
+  if(!current){current=sessions[0];next=sessions[1];}
 
-  if(!current){
-    current = sessions[0];
-    next = sessions[1];
-  }
+  // highlight active
+  [...sessionsEl.children].forEach(el=>{
+    el.classList.toggle("active",el.textContent.startsWith(current.name));
+  });
 
-  // time to end
-  let toEnd = current.end*3600 - t;
-  if(toEnd < 0) toEnd += 86400;
+  let toEnd=current.end*3600-t;
+  if(toEnd<0)toEnd+=86400;
 
-  // time to next start
-  let toNext = next.start*3600 - t;
-  if(toNext < 0) toNext += 86400;
+  let toNext=next.start*3600-t;
+  if(toNext<0)toNext+=86400;
 
-  const f = v => String(v).padStart(2,"0");
+  const f=v=>String(v).padStart(2,"0");
 
-  document.getElementById("end").textContent =
-    current.name + " " +
-    f(Math.floor(toEnd/3600)) + ":" +
-    f(Math.floor((toEnd%3600)/60)) + ":" +
-    f(toEnd%60);
+  document.getElementById("end").textContent=
+    `${current.name} ends in ${f(toEnd/3600|0)}:${f((toEnd%3600)/60|0)}:${f(toEnd%60)}`;
 
-  document.getElementById("next").textContent =
-    next.name + " " +
-    f(Math.floor(toNext/3600)) + ":" +
-    f(Math.floor((toNext%3600)/60)) + ":" +
-    f(toNext%60);
+  document.getElementById("next").textContent=
+    `${next.name} starts in ${f(toNext/3600|0)}:${f((toNext%3600)/60|0)}:${f(toNext%60)}`;
 }
 
-// ---- LOOP ----
-const mt5Canvas = document.getElementById("mt5");
-const istCanvas = document.getElementById("ist");
+// -------- LOOP --------
+const mt5Canvas=document.getElementById("mt5");
+const istCanvas=document.getElementById("ist");
 
 function loop(){
-  const now = new Date(Date.now() + utcOffsetMs);
-  const mt5 = new Date(now.getTime() + 2*3600000);
-  const ist = new Date(now.getTime() + 5.5*3600000);
+  const now=new Date(Date.now()+utcOffsetMs);
+  const mt5=new Date(now.getTime()+2*3600000);
+  const ist=new Date(now.getTime()+5.5*3600000);
 
-  drawClock(mt5Canvas, mt5);
-  drawClock(istCanvas, ist);
-  updateCountdowns(mt5);
+  drawClock(mt5Canvas,mt5);
+  drawClock(istCanvas,ist);
+  updateSessionsAndCountdown(mt5);
 
   requestAnimationFrame(loop);
 }

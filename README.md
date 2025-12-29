@@ -27,7 +27,7 @@ body{
   gap:120px;
 }
 
-canvas{ display:block }
+canvas{display:block}
 
 .sessions{
   display:grid;
@@ -77,17 +77,17 @@ canvas{ display:block }
 </div>
 
 <script>
-let syncedUTC = 0;
-let startPerf = 0;
+// ---- TIME BASE ----
+let utcOffsetMs = 0;
 
-// ---- INTERNET TIME SYNC ----
-async function syncTime(){
-  const r = await fetch("https://worldtimeapi.org/api/timezone/Etc/UTC");
-  const d = await r.json();
-  syncedUTC = new Date(d.utc_datetime).getTime();
-  startPerf = performance.now();
-}
-syncTime();
+// ---- SAFE INTERNET SYNC (NON-BLOCKING) ----
+fetch("https://worldtimeapi.org/api/timezone/Etc/UTC")
+  .then(r => r.json())
+  .then(d => {
+    const serverUTC = new Date(d.utc_datetime).getTime();
+    utcOffsetMs = serverUTC - Date.now();
+  })
+  .catch(()=>{}); // fallback silently
 
 // ---- SESSIONS (MT5 UTC+2) ----
 const sessions = [
@@ -101,12 +101,14 @@ const sessions = [
 function drawClock(canvas, date){
   const ctx = canvas.getContext("2d");
   const r = canvas.width/2;
+
+  ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.translate(r,r);
 
-  const sec = date.getSeconds() + date.getMilliseconds()/1000;
-  const min = date.getMinutes() + sec/60;
-  const hr  = date.getHours()%12 + min/60;
+  const sec = date.getSeconds()+date.getMilliseconds()/1000;
+  const min = date.getMinutes()+sec/60;
+  const hr  = date.getHours()%12+min/60;
 
   function hand(a,l,w){
     ctx.beginPath();
@@ -124,65 +126,48 @@ function drawClock(canvas, date){
   hand(hr*Math.PI/6,  r*0.48, 4.2);
   hand(min*Math.PI/30, r*0.68, 2.7);
   hand(sec*Math.PI/30, r*0.83, 1.6);
-
-  ctx.setTransform(1,0,0,1,0,0);
 }
 
-// ---- COUNTDOWNS ----
+// ---- COUNTDOWN ----
 function updateCountdowns(mt5){
-  const nowSec =
-    mt5.getHours()*3600 +
-    mt5.getMinutes()*60 +
-    mt5.getSeconds();
-
-  let current, next;
+  const t = mt5.getHours()*3600+mt5.getMinutes()*60+mt5.getSeconds();
+  let c,n;
 
   for(let i=0;i<sessions.length;i++){
     const s=sessions[i];
-    if(nowSec>=s.start*3600 && nowSec<s.end*3600){
-      current=s;
-      next=sessions[i+1]||sessions[0];
-      break;
+    if(t>=s.start*3600 && t<s.end*3600){
+      c=s; n=sessions[i+1]||sessions[0]; break;
     }
   }
 
-  if(!current){
-    current=sessions[0];
-    next=sessions[1];
-  }
+  if(!c){ c=sessions[0]; n=sessions[1]; }
 
-  let rem=current.end*3600-nowSec;
-  if(rem<0) rem+=86400;
+  let r=c.end*3600-t; if(r<0) r+=86400;
 
   document.getElementById("end").textContent =
-    String(Math.floor(rem/3600)).padStart(2,"0")+":"+
-    String(Math.floor((rem%3600)/60)).padStart(2,"0")+":"+
-    String(rem%60).padStart(2,"0");
+    String(Math.floor(r/3600)).padStart(2,"0")+":"+
+    String(Math.floor((r%3600)/60)).padStart(2,"0")+":"+
+    String(r%60).padStart(2,"0");
 
   document.getElementById("next").textContent =
-    String(next.start).padStart(2,"0")+":00";
+    String(n.start).padStart(2,"0")+":00";
 }
 
 // ---- LOOP ----
 function loop(){
-  if(!syncedUTC) return requestAnimationFrame(loop);
+  const now = new Date(Date.now()+utcOffsetMs);
+  const mt5 = new Date(now.getTime()+2*3600000);
+  const ist = new Date(now.getTime()+5.5*3600000);
 
-  const nowUTC = syncedUTC + (performance.now() - startPerf);
-  const now = new Date(nowUTC);
-
-  const mt5 = new Date(now.getTime() + 2*3600000);
-  const ist = new Date(now.getTime() + 5.5*3600000);
-
-  drawClock(mt5Canvas, mt5);
-  drawClock(istCanvas, ist);
+  drawClock(mt5Canvas,mt5);
+  drawClock(istCanvas,ist);
   updateCountdowns(mt5);
 
   requestAnimationFrame(loop);
 }
 
-const mt5Canvas = document.getElementById("mt5");
-const istCanvas = document.getElementById("ist");
-
+const mt5Canvas=document.getElementById("mt5");
+const istCanvas=document.getElementById("ist");
 loop();
 </script>
 

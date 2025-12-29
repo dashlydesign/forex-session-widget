@@ -1,11 +1,11 @@
 <html>
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <style>
 body{
   margin:0;
   background:#121212;
-  color:#fff;
+  color:white;
   font-family:Segoe UI, system-ui, sans-serif;
   height:100vh;
   display:flex;
@@ -22,7 +22,7 @@ body{
 
 .clocks{
   display:flex;
-  gap:140px;
+  gap:120px;
 }
 
 canvas{display:block}
@@ -30,7 +30,7 @@ canvas{display:block}
 .sessions{
   display:grid;
   grid-template-columns:repeat(4,1fr);
-  gap:20px;
+  gap:18px;
   width:680px;
 }
 
@@ -40,7 +40,7 @@ canvas{display:block}
   padding:14px 0;
   text-align:center;
   font-size:14px;
-  opacity:.55;
+  opacity:.5;
 }
 
 .session.active{
@@ -49,7 +49,7 @@ canvas{display:block}
 
 .countdowns{
   display:flex;
-  gap:64px;
+  gap:60px;
   font-size:14px;
 }
 </style>
@@ -74,14 +74,21 @@ canvas{display:block}
 </div>
 
 <script>
-// -------- TIME BASE --------
-let utcOffsetMs = 0;
+// -------- FETCH REAL TIME --------
+let utcBase = 0;
+let istBase = 0;
+
 fetch("https://worldtimeapi.org/api/timezone/Etc/UTC")
   .then(r=>r.json())
   .then(d=>{
-    utcOffsetMs = new Date(d.utc_datetime).getTime() - Date.now();
-  })
-  .catch(()=>{});
+    utcBase = new Date(d.datetime).getTime() - Date.now();
+  });
+
+fetch("https://worldtimeapi.org/api/timezone/Asia/Kolkata")
+  .then(r=>r.json())
+  .then(d=>{
+    istBase = new Date(d.datetime).getTime() - Date.now();
+  });
 
 // -------- SESSIONS (MT5 UTC+2) --------
 const sessions = [
@@ -91,8 +98,7 @@ const sessions = [
   {name:"New York", start:14, end:23}
 ];
 
-// render session boxes
-const sessionsEl = document.getElementById("sessions");
+const sessionsEl=document.getElementById("sessions");
 sessions.forEach(s=>{
   const d=document.createElement("div");
   d.className="session";
@@ -102,19 +108,18 @@ sessions.forEach(s=>{
 
 // -------- CLOCK DRAW --------
 function drawClock(canvas, date){
-  const ctx = canvas.getContext("2d");
-  const r = canvas.width/2;
-
+  const ctx=canvas.getContext("2d");
+  const r=canvas.width/2;
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.translate(r,r);
 
-  // ticks
+  // subtle ticks
   ctx.strokeStyle="rgba(255,255,255,.25)";
   ctx.lineWidth=1;
   for(let i=0;i<12;i++){
-    ctx.beginPath();
     const a=i*Math.PI/6;
+    ctx.beginPath();
     ctx.moveTo(Math.cos(a)*r*0.82,Math.sin(a)*r*0.82);
     ctx.lineTo(Math.cos(a)*r*0.88,Math.sin(a)*r*0.88);
     ctx.stroke();
@@ -128,25 +133,22 @@ function drawClock(canvas, date){
     ctx.beginPath();
     ctx.lineWidth=w;
     ctx.lineCap="round";
-    ctx.strokeStyle="#fff";
+    ctx.strokeStyle="white";
     ctx.moveTo(0,0);
-    ctx.lineTo(
-      Math.cos(a-Math.PI/2)*l,
-      Math.sin(a-Math.PI/2)*l
-    );
+    ctx.lineTo(Math.cos(a-Math.PI/2)*l,Math.sin(a-Math.PI/2)*l);
     ctx.stroke();
   }
 
-  hand(hr*Math.PI/6,  r*0.48, 4.2);
+  hand(hr*Math.PI/6, r*0.48, 4.2);
   hand(min*Math.PI/30, r*0.68, 2.7);
   hand(sec*Math.PI/30, r*0.83, 1.6);
 }
 
 // -------- COUNTDOWNS --------
-function updateSessionsAndCountdown(mt5){
-  const t = mt5.getHours()*3600 + mt5.getMinutes()*60 + mt5.getSeconds();
+function updateSessions(mt5){
+  const t=mt5.getHours()*3600+mt5.getMinutes()*60+mt5.getSeconds();
+  let current,next;
 
-  let current, next;
   for(let i=0;i<sessions.length;i++){
     if(t>=sessions[i].start*3600 && t<sessions[i].end*3600){
       current=sessions[i];
@@ -156,7 +158,6 @@ function updateSessionsAndCountdown(mt5){
   }
   if(!current){current=sessions[0];next=sessions[1];}
 
-  // highlight active
   [...sessionsEl.children].forEach(el=>{
     el.classList.toggle("active",el.textContent.startsWith(current.name));
   });
@@ -177,17 +178,16 @@ function updateSessionsAndCountdown(mt5){
 }
 
 // -------- LOOP --------
-const mt5Canvas=document.getElementById("mt5");
-const istCanvas=document.getElementById("ist");
-
 function loop(){
-  const now=new Date(Date.now()+utcOffsetMs);
-  const mt5=new Date(now.getTime()+2*3600000);
-  const ist=new Date(now.getTime()+5.5*3600000);
+  const now=Date.now();
 
-  drawClock(mt5Canvas,mt5);
-  drawClock(istCanvas,ist);
-  updateSessionsAndCountdown(mt5);
+  const utc=new Date(now+utcBase);
+  const mt5=new Date(utc.getTime()+2*3600000);
+  const ist=new Date(now+istBase);
+
+  drawClock(document.getElementById("mt5"),mt5);
+  drawClock(document.getElementById("ist"),ist);
+  updateSessions(mt5);
 
   requestAnimationFrame(loop);
 }

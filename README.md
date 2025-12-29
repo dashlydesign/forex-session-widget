@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -77,17 +76,15 @@ canvas{display:block}
 </div>
 
 <script>
-// ---- TIME BASE ----
+// ---- TIME BASE (SAFE) ----
 let utcOffsetMs = 0;
 
-// ---- SAFE INTERNET SYNC (NON-BLOCKING) ----
 fetch("https://worldtimeapi.org/api/timezone/Etc/UTC")
-  .then(r => r.json())
-  .then(d => {
-    const serverUTC = new Date(d.utc_datetime).getTime();
-    utcOffsetMs = serverUTC - Date.now();
+  .then(r=>r.json())
+  .then(d=>{
+    utcOffsetMs = new Date(d.utc_datetime).getTime() - Date.now();
   })
-  .catch(()=>{}); // fallback silently
+  .catch(()=>{});
 
 // ---- SESSIONS (MT5 UTC+2) ----
 const sessions = [
@@ -97,7 +94,7 @@ const sessions = [
   {name:"New York", start:14, end:23}
 ];
 
-// ---- DRAW CLOCK ----
+// ---- CLOCK ----
 function drawClock(canvas, date){
   const ctx = canvas.getContext("2d");
   const r = canvas.width/2;
@@ -128,32 +125,43 @@ function drawClock(canvas, date){
   hand(sec*Math.PI/30, r*0.83, 1.6);
 }
 
-// ---- COUNTDOWN ----
+// ---- COUNTDOWNS WITH SESSION NAMES ----
 function updateCountdowns(mt5){
-  const t = mt5.getHours()*3600+mt5.getMinutes()*60+mt5.getSeconds();
-  let c,n;
+  const t = mt5.getHours()*3600 + mt5.getMinutes()*60 + mt5.getSeconds();
+  let current, next;
 
   for(let i=0;i<sessions.length;i++){
     const s=sessions[i];
     if(t>=s.start*3600 && t<s.end*3600){
-      c=s; n=sessions[i+1]||sessions[0]; break;
+      current=s;
+      next=sessions[i+1]||sessions[0];
+      break;
     }
   }
 
-  if(!c){ c=sessions[0]; n=sessions[1]; }
+  if(!current){
+    current=sessions[0];
+    next=sessions[1];
+  }
 
-  let r=c.end*3600-t; if(r<0) r+=86400;
+  let r=current.end*3600 - t;
+  if(r<0) r+=86400;
+
+  const h=String(Math.floor(r/3600)).padStart(2,"0");
+  const m=String(Math.floor((r%3600)/60)).padStart(2,"0");
+  const s=String(r%60).padStart(2,"0");
 
   document.getElementById("end").textContent =
-    String(Math.floor(r/3600)).padStart(2,"0")+":"+
-    String(Math.floor((r%3600)/60)).padStart(2,"0")+":"+
-    String(r%60).padStart(2,"0");
+    current.name + " " + h + ":" + m + ":" + s;
 
   document.getElementById("next").textContent =
-    String(n.start).padStart(2,"0")+":00";
+    next.name + " " + String(next.start).padStart(2,"0") + ":00";
 }
 
 // ---- LOOP ----
+const mt5Canvas=document.getElementById("mt5");
+const istCanvas=document.getElementById("ist");
+
 function loop(){
   const now = new Date(Date.now()+utcOffsetMs);
   const mt5 = new Date(now.getTime()+2*3600000);
@@ -165,9 +173,6 @@ function loop(){
 
   requestAnimationFrame(loop);
 }
-
-const mt5Canvas=document.getElementById("mt5");
-const istCanvas=document.getElementById("ist");
 loop();
 </script>
 

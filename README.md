@@ -1,13 +1,17 @@
+<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-body{
+html,body{
   margin:0;
   background:#121212;
   color:#fff;
   font-family:Segoe UI, system-ui, sans-serif;
-  height:100vh;
+  height:100%;
+}
+
+body{
   display:flex;
   justify-content:center;
   align-items:center;
@@ -41,6 +45,7 @@ canvas{display:block}
   text-align:center;
   font-size:14px;
   opacity:.45;
+  transition:background .25s, opacity .25s;
 }
 
 .session.active{
@@ -80,40 +85,44 @@ canvas{display:block}
 </div>
 
 <script>
+// ---------- COLORS ----------
+const sessionColors={
+  "Sydney":"#1f3d2b",
+  "Tokyo":"#1e344a",
+  "London":"#3d2f1f",
+  "New York":"#35203f"
+};
+
 // ---------- FETCH TIME ----------
-let utcBase = 0;
-let istBase = 0;
+let utcBase=0, istBase=0;
 
 fetch("https://worldtimeapi.org/api/timezone/Etc/UTC")
   .then(r=>r.json())
-  .then(d=>{
-    utcBase = new Date(d.datetime).getTime() - Date.now();
-  });
+  .then(d=>utcBase=new Date(d.datetime).getTime()-Date.now());
 
 fetch("https://worldtimeapi.org/api/timezone/Asia/Kolkata")
   .then(r=>r.json())
-  .then(d=>{
-    istBase = new Date(d.datetime).getTime() - Date.now();
-  });
+  .then(d=>istBase=new Date(d.datetime).getTime()-Date.now());
 
 // ---------- SESSIONS (MT5 UTC+2) ----------
-const sessions = [
-  {name:"Sydney", start:0, end:9},
-  {name:"Tokyo", start:2, end:11},
-  {name:"London", start:9, end:18},
-  {name:"New York", start:14, end:23}
+const sessions=[
+  {name:"Sydney",start:0,end:9},
+  {name:"Tokyo",start:2,end:11},
+  {name:"London",start:9,end:18},
+  {name:"New York",start:14,end:23}
 ];
 
-const sessionsEl = document.getElementById("sessions");
+const sessionsEl=document.getElementById("sessions");
 sessions.forEach(s=>{
   const d=document.createElement("div");
   d.className="session";
-  d.innerHTML = `${s.name}<span>${String(s.start).padStart(2,"0")}–${String(s.end).padStart(2,"0")}</span>`;
+  d.dataset.name=s.name;
+  d.innerHTML=`${s.name}<span>${String(s.start).padStart(2,"0")}–${String(s.end).padStart(2,"0")}</span>`;
   sessionsEl.appendChild(d);
 });
 
 // ---------- CLOCK ----------
-function drawClock(canvas, date){
+function drawClock(canvas,date){
   const ctx=canvas.getContext("2d");
   const r=canvas.width/2;
   ctx.setTransform(1,0,0,1,0,0);
@@ -143,55 +152,44 @@ function drawClock(canvas, date){
     ctx.stroke();
   }
 
-  hand(hr*Math.PI/6, r*0.48, 4.2);
-  hand(min*Math.PI/30, r*0.68, 2.7);
-  hand(sec*Math.PI/30, r*0.83, 1.6);
+  hand(hr*Math.PI/6,r*0.48,4.2);
+  hand(min*Math.PI/30,r*0.68,2.7);
+  hand(sec*Math.PI/30,r*0.83,1.6);
 }
 
 // ---------- MULTI-ACTIVE LOGIC ----------
-function updateSessionsAndCountdown(mt5){
-  const nowSec = mt5.getHours()*3600 + mt5.getMinutes()*60 + mt5.getSeconds();
-
-  let active=[], inactive=[];
+function updateSessions(mt5){
+  const nowSec=mt5.getHours()*3600+mt5.getMinutes()*60+mt5.getSeconds();
+  const active=[], inactive=[];
 
   sessions.forEach(s=>{
-    const start=s.start*3600;
-    const end=s.end*3600;
-    if(nowSec>=start && nowSec<end){
-      active.push(s);
-    }else{
-      inactive.push(s);
-    }
+    if(nowSec>=s.start*3600 && nowSec<s.end*3600) active.push(s);
+    else inactive.push(s);
   });
 
   [...sessionsEl.children].forEach(el=>{
-    el.classList.toggle(
-      "active",
-      active.some(a=>el.textContent.startsWith(a.name))
-    );
+    const on=active.some(a=>a.name===el.dataset.name);
+    el.classList.toggle("active",on);
+    el.style.background=on?sessionColors[el.dataset.name]:"#1a1a1a";
   });
 
   const cd=document.getElementById("countdowns");
   cd.innerHTML="";
-
   const f=v=>String(v).padStart(2,"0");
 
-  // Ending countdowns (for all active)
   active
     .map(s=>{
       let t=s.end*3600-nowSec;
       if(t<0)t+=86400;
-      return {name:s.name, t};
+      return {name:s.name,t};
     })
     .sort((a,b)=>a.t-b.t)
     .forEach(e=>{
-      cd.innerHTML +=
-        `<div>${e.name} ends in ${f(e.t/3600|0)}:${f((e.t%3600)/60|0)}:${f(e.t%60)}</div>`;
+      cd.innerHTML+=`<div>${e.name} ends in ${f(e.t/3600|0)}:${f((e.t%3600)/60|0)}:${f(e.t%60)}</div>`;
     });
 
-  // Next starting session
   if(inactive.length){
-    const next=inactive
+    const n=inactive
       .map(s=>{
         let t=s.start*3600-nowSec;
         if(t<0)t+=86400;
@@ -199,8 +197,7 @@ function updateSessionsAndCountdown(mt5){
       })
       .sort((a,b)=>a.t-b.t)[0];
 
-    cd.innerHTML +=
-      `<div>${next.name} starts in ${f(next.t/3600|0)}:${f((next.t%3600)/60|0)}:${f(next.t%60)}</div>`;
+    cd.innerHTML+=`<div>${n.name} starts in ${f(n.t/3600|0)}:${f((n.t%3600)/60|0)}:${f(n.t%60)}</div>`;
   }
 }
 
@@ -213,7 +210,7 @@ function loop(){
 
   drawClock(document.getElementById("mt5"),mt5);
   drawClock(document.getElementById("ist"),ist);
-  updateSessionsAndCountdown(mt5);
+  updateSessions(mt5);
 
   requestAnimationFrame(loop);
 }

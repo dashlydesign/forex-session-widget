@@ -76,7 +76,7 @@ canvas{display:block}
 </div>
 
 <script>
-// ---- TIME BASE (SAFE) ----
+// ---- SAFE TIME BASE ----
 let utcOffsetMs = 0;
 
 fetch("https://worldtimeapi.org/api/timezone/Etc/UTC")
@@ -125,50 +125,60 @@ function drawClock(canvas, date){
   hand(sec*Math.PI/30, r*0.83, 1.6);
 }
 
-// ---- COUNTDOWNS WITH SESSION NAMES ----
+// ---- BOTH COUNTDOWNS WITH SECONDS ----
 function updateCountdowns(mt5){
   const t = mt5.getHours()*3600 + mt5.getMinutes()*60 + mt5.getSeconds();
+
   let current, next;
 
   for(let i=0;i<sessions.length;i++){
-    const s=sessions[i];
-    if(t>=s.start*3600 && t<s.end*3600){
-      current=s;
-      next=sessions[i+1]||sessions[0];
+    const s = sessions[i];
+    if(t >= s.start*3600 && t < s.end*3600){
+      current = s;
+      next = sessions[i+1] || sessions[0];
       break;
     }
   }
 
   if(!current){
-    current=sessions[0];
-    next=sessions[1];
+    current = sessions[0];
+    next = sessions[1];
   }
 
-  let r=current.end*3600 - t;
-  if(r<0) r+=86400;
+  // time to end
+  let toEnd = current.end*3600 - t;
+  if(toEnd < 0) toEnd += 86400;
 
-  const h=String(Math.floor(r/3600)).padStart(2,"0");
-  const m=String(Math.floor((r%3600)/60)).padStart(2,"0");
-  const s=String(r%60).padStart(2,"0");
+  // time to next start
+  let toNext = next.start*3600 - t;
+  if(toNext < 0) toNext += 86400;
+
+  const f = v => String(v).padStart(2,"0");
 
   document.getElementById("end").textContent =
-    current.name + " " + h + ":" + m + ":" + s;
+    current.name + " " +
+    f(Math.floor(toEnd/3600)) + ":" +
+    f(Math.floor((toEnd%3600)/60)) + ":" +
+    f(toEnd%60);
 
   document.getElementById("next").textContent =
-    next.name + " " + String(next.start).padStart(2,"0") + ":00";
+    next.name + " " +
+    f(Math.floor(toNext/3600)) + ":" +
+    f(Math.floor((toNext%3600)/60)) + ":" +
+    f(toNext%60);
 }
 
 // ---- LOOP ----
-const mt5Canvas=document.getElementById("mt5");
-const istCanvas=document.getElementById("ist");
+const mt5Canvas = document.getElementById("mt5");
+const istCanvas = document.getElementById("ist");
 
 function loop(){
-  const now = new Date(Date.now()+utcOffsetMs);
-  const mt5 = new Date(now.getTime()+2*3600000);
-  const ist = new Date(now.getTime()+5.5*3600000);
+  const now = new Date(Date.now() + utcOffsetMs);
+  const mt5 = new Date(now.getTime() + 2*3600000);
+  const ist = new Date(now.getTime() + 5.5*3600000);
 
-  drawClock(mt5Canvas,mt5);
-  drawClock(istCanvas,ist);
+  drawClock(mt5Canvas, mt5);
+  drawClock(istCanvas, ist);
   updateCountdowns(mt5);
 
   requestAnimationFrame(loop);
